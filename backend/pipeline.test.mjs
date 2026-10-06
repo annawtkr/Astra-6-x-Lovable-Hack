@@ -42,3 +42,19 @@ test('unverified authors instruct writer to omit the research finding and audito
 
 test('missing author-year citation and unsupported recent wording trigger bounded repair',async()=>{let calls=0;const p=createPipeline({apiKey:'test',fetchImpl:async(_,options)=>{calls++;const body=JSON.parse(options.body);if(calls===1)return complete({drafts:[{format:'x',title:'X',posts:['A recent writing study suggests support may help.']}]});if(calls===2){const input=JSON.parse(body.messages[1].content);assert.equal(input.allowedCitations[0].citation,'(Smith et al., 2025)');assert.equal(input.citationProblems[0].problems.length,2);return complete({drafts:[{format:'x',title:'X',posts:['Writing support may help in this limited task (Smith et al., 2025).']}]});}return complete({checks:[{format:'x',warnings:[]}]});}});const result=await p.generate({transcript:source,brief,format:'x',acceptedEvidence:[evidence]});assert.equal(calls,3);assert.match(result.drafts[0].posts[0],/\(Smith et al\., 2025\)/);assert.deepEqual(result.drafts[0].warnings,[]);});
 test('persistent missing citation remains a visible warning even when model audit misses it',async()=>{let calls=0;const p=createPipeline({apiKey:'test',fetchImpl:async()=>complete(++calls<=2?{drafts:[{format:'x',title:'X',posts:['A recent study suggests writing support helps.']}]}:{checks:[{format:'x',warnings:[]}]})});const result=await p.generate({transcript:source,brief,format:'x',acceptedEvidence:[evidence]});assert.equal(calls,3);assert.equal(result.drafts[0].warnings.length,2);});
+
+
+test('grouped author-year citations satisfy attribution without accepting different authors or years', async()=>{
+ const {hasEvidenceCitation}=await import('../supabase/functions/_shared/pipeline.mjs');
+ const allowed=[{citation:'(Lee et al., 2025)'},{citation:'(Bastani et al., 2025)'}];
+ assert.equal(hasEvidenceCitation('Qualified findings (Lee et al., 2025; Bastani et al., 2025).',allowed),true);
+ assert.equal(hasEvidenceCitation('Qualified findings (Lee et al., 2024; Doe, 2025).',allowed),false);
+ assert.equal(hasEvidenceCitation('Lee et al., 2025 is not a parenthetical citation.',allowed),false);
+});
+test('valid grouped citations do not trigger a false missing-citation repair', async()=>{
+ let calls=0;
+ const p=createPipeline({apiKey:'test',fetchImpl:async()=>complete(++calls===1?{drafts:[{format:'x',title:'X',posts:['Limited task-specific findings (Smith et al., 2025; Jones, 2024).']}]}:{checks:[{format:'x',warnings:[]}]})});
+ const second={...evidence,id:'two',sources:[{...evidence.sources[0],authors:'Alex Jones',year:'2024',url:'https://example.org/second'}]};
+ const result=await p.generate({transcript:source,brief,format:'x',acceptedEvidence:[evidence,second]});
+ assert.equal(calls,2); assert.deepEqual(result.drafts[0].warnings,[]);
+});

@@ -1,0 +1,16 @@
+{
+  "transcript": "There is research that when you stop doing cognitive behavior that you normally do, you will kind of lose that ability. If you use less critical thinking because you are using LLMs and just constantly approving what it is saying, you will find it more difficult to remain as cognitively alert.",
+  "expectations": [
+    "Run the transcript without paper titles or seeded search results.",
+    "Distinguish reduced reported effort, impaired learning, skill retention and general cognitive alertness.",
+    "Retain verified relevant indirect evidence with qualifications; do not require it to prove the whole causal claim.",
+    "Distinguish a failed source lookup from a completed search with no relevant evidence.",
+    "Keep the original question visible and require selection before findings enter drafts.",
+    "Generate author-year citations only from verified metadata; do not claim permanent cognitive decline from task-specific evidence."
+  ],
+  "referenceStudiesForManualReviewOnly": [
+    "https://doi.org/10.1145/3706598.3713778",
+    "https://doi.org/10.1073/pnas.2422633122",
+    "https://arxiv.org/abs/2506.08872"
+  ]
+}

@@ -39,3 +39,14 @@ Lovable generated the initial React interface, visual design, capture controls, 
 
 ## Limits
 English text-only output; approximate 280-character X guidance rather than platform weighted counting. AI fidelity review can miss errors: user review remains necessary. Uploaded audio relies on readable browser duration metadata. Recording needs browser microphone permission. No scheduling, social connections or persistent app history. Hosting-provider telemetry is separate from the application. Research sources can be incomplete or misinterpreted: review populations, dates and study methods before using a finding. Web research uses OpenAI Responses web search and incurs API usage.
+
+
+### Hosted Lovable source
+
+`hosted-lovable/` contains a source snapshot of the deployed Lovable application, including its server-side research pipeline and regression tests (Lovable commit `8e9508cad00c6b42b2a99059358443d9488393c3`). The repository root remains the separately runnable local Vite/Node version. These are separate implementations, not automatic two-way GitHub sync. Server secrets are excluded from both.
+
+### Research regression
+
+Research is experimental, not a guarantee that a claim is established or that all relevant papers will be found. A verified study may offer only indirect evidence. Review its population, measured outcome, and limitations before selecting it.
+
+Run `node backend/research-regression.mjs` from the repository root for an opt-in live check of the cognitive-offloading example in `examples/cognitive-offloading-regression.json`. This uses the configured OpenAI API key and incurs API usage. The test supplies no paper titles to the search and checks that selectable evidence can reach an author-year draft. It does not replace a human review of scientific accuracy.
