@@ -7,7 +7,7 @@ Hosted Lovable demo: https://brief-whisper-studio.lovable.app/
 ## Run locally
 Requires Node.js 22+ and pnpm. Run `pnpm install`, then `pnpm build`, then `pnpm start`. Open http://127.0.0.1:8787.
 
-The server reads `OPENAI_API_KEY` from `.env.local` (ignored by Git). Never put this key into browser code or a VITE_ variable. Optional settings are documented in `.env.example`. Research uses `gpt-4.1` by default (`OPENAI_RESEARCH_MODEL`); drafting remains `gpt-4.1-mini`. It performs a search, a separate primary-source verification pass, and a scope check before showing findings.
+The server reads `OPENAI_API_KEY` from `.env.local` (ignored by Git). Never put this key into browser code or a VITE_ variable. Optional settings are documented in `.env.example`. Research extraction and checking use `gpt-4.1` (`OPENAI_RESEARCH_MODEL`); agentic web search uses `gpt-5.5` with low reasoning (`OPENAI_SEARCH_MODEL`). Drafting remains `gpt-4.1-mini`. It performs a search, a separate primary-source verification pass, and a scope check before showing findings.
 
 For development, run `pnpm start` and `pnpm dev` in separate terminals. Vite proxies /api to the local server. For a no-key walkthrough, leave OPENAI_API_KEY unset: the app offers explicitly labelled sample content and manual editing.
 

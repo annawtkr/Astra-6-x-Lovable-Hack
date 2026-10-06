@@ -4,7 +4,7 @@ import { resolve, extname } from 'node:path';
 import { createHandler } from '../supabase/functions/_shared/pipeline.mjs';
 try { process.loadEnvFile('.env.local'); } catch(error) { if(error.code!=='ENOENT')throw error; }
 const port=Number(process.env.API_PORT||8787);
-const handlers=Object.fromEntries(['transcribe','analyse','research','generate'].map(name=>[name,createHandler(name,{apiKey:process.env.OPENAI_API_KEY,model:process.env.OPENAI_TEXT_MODEL||'gpt-4.1-mini',researchModel:process.env.OPENAI_RESEARCH_MODEL||'gpt-4.1',transcriptionModel:process.env.OPENAI_TRANSCRIPTION_MODEL||'gpt-4o-mini-transcribe'})]));
+const handlers=Object.fromEntries(['transcribe','analyse','research','generate'].map(name=>[name,createHandler(name,{apiKey:process.env.OPENAI_API_KEY,model:process.env.OPENAI_TEXT_MODEL||'gpt-4.1-mini',researchModel:process.env.OPENAI_RESEARCH_MODEL||'gpt-4.1',searchModel:process.env.OPENAI_SEARCH_MODEL||'gpt-5.5',transcriptionModel:process.env.OPENAI_TRANSCRIPTION_MODEL||'gpt-4o-mini-transcribe'})]));
 const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon'};
 const server=http.createServer(async(req,res)=>{
  try {
