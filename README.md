@@ -43,7 +43,7 @@ English text-only output; approximate 280-character X guidance rather than platf
 
 ### Hosted Lovable source
 
-`hosted-lovable/` contains a source snapshot of the deployed Lovable application, including its server-side research pipeline and regression tests (Lovable commit `8e9508cad00c6b42b2a99059358443d9488393c3`). The repository root remains the separately runnable local Vite/Node version. These are separate implementations, not automatic two-way GitHub sync. Server secrets are excluded from both.
+`hosted-lovable/` contains a source snapshot of the deployed Lovable application, including its server-side research pipeline and regression tests (Lovable commit `6a5059f528bbc9f27d10dd6b8cf53ece0a1be152`). The repository root remains the separately runnable local Vite/Node version. These are separate implementations, not automatic two-way GitHub sync. Server secrets are excluded from both.
 
 ### Research regression
 

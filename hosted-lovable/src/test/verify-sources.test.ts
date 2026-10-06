@@ -97,3 +97,36 @@ describe("verifySources Unsupported branch", () => {
     expect(out.finding.length).toBe(long.length);
   });
 });
+
+describe("verifySources per-source attribution", () => {
+  const U2 = "https://example.org/study-2";
+  const two = (json: unknown) => ({ ...opts(json), fetchImpl: (async () => new Response(JSON.stringify({ output: [
+    { type: "web_search_call", status: "completed", action: { type: "open_page", url: URL } },
+    { type: "web_search_call", status: "completed", action: { type: "open_page", url: U2 } },
+    { type: "message", content: [{ type: "output_text", text: JSON.stringify(json), annotations: [] }] }] }), { status: 200 })) as typeof fetch });
+  const item2: EvidenceItem = { ...baseItem, sources: [{ url: URL, title: "Motor" }, { url: U2, title: "Literacy" }] };
+  const motor = { requestedUrl: URL, url: URL, verified: true, title: "Motor skill meta-analysis", authors: ["T Tatel"], year: "2025", method: "meta-analysis", population: "adults", measuredOutcome: "motor retention", supportsFinding: "partly", finding: "Procedural motor skills declined after disuse." };
+  const lit = { requestedUrl: U2, url: U2, verified: true, title: "Literacy study", authors: ["Z Other"], year: "2019", method: "cohort", population: "adults", measuredOutcome: "literacy", supportsFinding: "yes", finding: "Literacy and numeracy declined without use." };
+
+  it("drops aggregated literacy results when only the motor source is retained", async () => {
+    const out = await verifySources(item2, two({ sources: [motor, { ...lit, verified: false }], finding: "Motor skills, literacy and numeracy, and GPS navigation all decline.", counterevidence: "" }));
+    expect(out.citation).toBe("(Tatel, 2025)");
+    expect(out.finding).toBe("Procedural motor skills declined after disuse.");
+    expect(out.finding).not.toMatch(/literacy|GPS/i);
+    expect(out.sources.map((x) => x.url)).toEqual([URL]);
+  });
+
+  it("selects citation and finding from the same row when the first row is rejected", async () => {
+    const out = await verifySources(item2, two({ sources: [{ ...motor, verified: false }, lit], finding: "aggregate", counterevidence: "" }));
+    expect(out.citation).toBe("(Other, 2019)");
+    expect(out.finding).toBe("Literacy and numeracy declined without use.");
+    expect(out.year).toBe("2019");
+  });
+
+  it("fails recoverably when multiple rows lack per-source findings", async () => {
+    const out = await verifySources(item2, two({ sources: [{ ...motor, finding: "" }, { ...lit, finding: "" }], finding: "aggregate", counterevidence: "" }));
+    expect(out.verification).toBe("access-failed");
+    expect(out.finding).not.toBe("aggregate");
+    expect(isSelectable(out)).toBe(false);
+  });
+});

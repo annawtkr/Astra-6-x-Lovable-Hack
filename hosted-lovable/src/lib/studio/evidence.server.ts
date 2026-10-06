@@ -176,7 +176,7 @@ export async function verifySources(item: EvidenceItem, opts: Opts): Promise<Evi
     max_tool_calls: 10,
     include: ["web_search_call.action.sources"],
     instructions:
-      "Open EACH listed URL and read the primary page. Do not rely on the earlier summary. Return ONE JSON object only: {\"sources\":[{\"requestedUrl\" (the listed URL this row is about),\"url\" (the URL you actually opened for it — the same page, or its official record such as the PubMed/DOI/publisher/arXiv page of the SAME study),\"identifier\" (DOI or arXiv id printed on the page, else empty),\"publicationStatus\" (peer-reviewed|preprint|unknown — peer-reviewed ONLY if the page states the journal/conference publication; never infer),\"verified\" (true only if you opened it and it is the study itself or its official record),\"title\" (exact publication title as printed, else empty),\"authors\" (array of author names exactly as printed on the page, else empty array — never guess),\"year\" (publication year as printed, else empty),\"method\" (e.g. randomised experiment, cross-sectional survey, systematic review — as the paper itself states),\"population\",\"measuredOutcome\" (what was actually measured, e.g. reading comprehension vs writing time),\"supportsFinding\" (yes|partly|no)}],\"finding\" (corrected concise finding using only verified sources, or empty),\"counterevidence\" (brief note of contrary or null findings you saw, else empty)}. Leave fields empty rather than guess.",
+      "Open EACH listed URL and read the primary page. Do not rely on the earlier summary. Return ONE JSON object only: {\"sources\":[{\"requestedUrl\" (the listed URL this row is about),\"url\" (the URL you actually opened for it — the same page, or its official record such as the PubMed/DOI/publisher/arXiv page of the SAME study),\"identifier\" (DOI or arXiv id printed on the page, else empty),\"publicationStatus\" (peer-reviewed|preprint|unknown — peer-reviewed ONLY if the page states the journal/conference publication; never infer),\"verified\" (true only if you opened it and it is the study itself or its official record),\"title\" (exact publication title as printed, else empty),\"authors\" (array of author names exactly as printed on the page, else empty array — never guess),\"year\" (publication year as printed, else empty),\"method\" (e.g. randomised experiment, cross-sectional survey, systematic review — as the paper itself states),\"population\",\"measuredOutcome\" (what was actually measured, e.g. reading comprehension vs writing time),\"supportsFinding\" (yes|partly|no),\"finding\" (what THIS paper itself actually found, from its own measured results only — never mention results of other papers; else empty),\"limitations\" (limitations of THIS paper only, else empty)}],\"finding\" (corrected concise finding using only verified sources, or empty),\"counterevidence\" (brief note of contrary or null findings you saw, else empty)}. Leave fields empty rather than guess.",
     input: JSON.stringify({ question: item.question, earlierFinding: item.finding, urls: item.sources.map((x) => x.url) }),
   });
   const v = parseJson(outputTexts(res).map((t) => t.text).join("\n")) ?? {};
@@ -209,43 +209,46 @@ export async function verifySources(item: EvidenceItem, opts: Opts): Promise<Evi
     // Sources exist but could not be opened/read: NOT "no evidence". Keep them visible, unusable in drafts.
     return { ...item, verification: "access-failed", citation: "", scope: "none",
       limitations: "Sources were found but could not be opened and verified, so this can't be cited in drafts. Open the links to check them yourself, or search again." };
+  // Card content derives ONLY from one primary source row. The global v.finding may aggregate results of
+  // rejected or other papers, so it is used only when the verifier returned exactly one row and it was retained.
+  const globalOk = rows.length === 1 && metaOk.length === 1;
+  const rowFinding = (r: any) => sFinding(r?.finding) || (globalOk ? sFinding(v.finding) : "");
+  const authorsOf = (r: any): string[] => Array.isArray(r?.authors) ? r.authors.filter((a: unknown) => typeof a === "string" && a.trim()).slice(0, 30).map((a: string) => a.trim().slice(0, 120)) : [];
+  const yearOf = (r: any) => s(r?.year).match(/\b(19|20)\d{2}\b/)?.[0] ?? "";
+  const srcOf = (r: any, url: string) => ({ url, title: s(r.title).slice(0, 300), authors: authorsOf(r), preprint: isPreprintUrl(url) || r.publicationStatus === "preprint" });
+  const noRowFinding = { ...item, verification: "access-failed" as const, citation: "", scope: "none" as const, suggestedWording: "",
+    limitations: "Studies were opened, but the check did not report what each study itself found, so nothing can be attributed or cited. Search again." };
   if (!good.length) {
-    // Studies opened and identified but do not support the claim. Keep the verified rows'
-    // real metadata (authors/year/method/population); "verified" only when the primary row's
-    // printed authors AND year were read — same rule as the supported path.
-    const primary = metaOk[0]!; // metaOk is non-empty here (empty case returned above)
-    const pAuthors: string[] = Array.isArray(primary.r.authors) ? primary.r.authors.filter((a: unknown) => typeof a === "string" && a.trim()).slice(0, 30).map((a: string) => a.trim().slice(0, 120)) : [];
-    const pYear = s(primary.r.year).match(/\b(19|20)\d{2}\b/)?.[0] ?? "";
+    // Opened and identified but not supporting the claim. Metadata + finding from the primary row only.
+    const pick = metaOk.find((x) => rowFinding(x.r)) ?? metaOk[0]!;
+    const pf = rowFinding(pick.r);
+    const pAuthors = authorsOf(pick.r), pYear = yearOf(pick.r);
     return { ...item, verification: pAuthors.length && pYear ? "verified" : "metadata-incomplete", status: "Unsupported", scope: "none", citation: "", suggestedWording: "",
-      finding: sFinding(v.finding) || "The opened studies do not support this finding.",
-      studyType: [isPreprintUrl(primary.url) || primary.r.publicationStatus === "preprint" ? "Preprint (not a peer-reviewed version)" : "", s(primary.r.method)].filter(Boolean).join(" — "),
-      year: s(primary.r.year),
-      population: s(primary.r.population) || item.population,
-      sources: metaOk.map((x) => ({ url: x.url, title: s(x.r.title).slice(0, 300),
-        authors: Array.isArray(x.r.authors) ? x.r.authors.filter((a: unknown) => typeof a === "string" && a.trim()).slice(0, 30).map((a: string) => a.trim().slice(0, 120)) : [],
-        preprint: isPreprintUrl(x.url) || x.r.publicationStatus === "preprint" })),
-      limitations: "Studies were opened and identified, but they do not support this claim." };
+      finding: pf || "The opened study does not support this finding.",
+      studyType: [isPreprintUrl(pick.url) || pick.r.publicationStatus === "preprint" ? "Preprint (not a peer-reviewed version)" : "", s(pick.r.method)].filter(Boolean).join(" — "),
+      year: s(pick.r.year),
+      population: s(pick.r.population),
+      sources: [srcOf(pick.r, pick.url)],
+      limitations: ["Study was opened and identified, but it does not support this claim.", s(pick.r.limitations)].filter(Boolean).join(" ") };
   }
-  const first = good[0];
-  const firstAuthors: string[] = Array.isArray(first.authors) ? first.authors.filter((a: unknown) => typeof a === "string" && a.trim()) : [];
-  const firstYear = s(first.year).match(/\b(19|20)\d{2}\b/)?.[0] ?? "";
+  // Primary = first usable verified row: has its own finding, prefer printed authors + year.
+  const withFinding = good.filter((r) => rowFinding(r));
+  if (!withFinding.length) return noRowFinding;
+  const first = withFinding.find((r) => authorsOf(r).length && yearOf(r)) ?? withFinding[0]!;
+  const firstAuthors = authorsOf(first), firstYear = yearOf(first);
   const preprint = isPreprintUrl(first.url) || first.publicationStatus === "preprint";
-  const finding = sFinding(v.finding) || item.finding;
-  const counter = s(v.counterevidence);
+  const counter = globalOk ? s(v.counterevidence) : "";
   return {
     ...item,
-    // "verified" only when title, printed authors AND year were all read; otherwise metadata is incomplete.
     verification: firstAuthors.length && firstYear ? "verified" : "metadata-incomplete",
-    status: item.status === "Supported" && good.some((r) => r.supportsFinding === "partly") ? "Mixed" : counter && item.status === "Supported" ? "Mixed" : item.status,
-    finding,
+    status: item.status === "Supported" && (first.supportsFinding === "partly" || counter) ? "Mixed" : item.status,
+    finding: rowFinding(first),
     studyType: [preprint && "Preprint (not a peer-reviewed version)", s(first.method)].filter(Boolean).join(" — "),
     year: s(first.year),
-    population: s(first.population) || item.population,
-    limitations: [s(first.measuredOutcome) && `Measured: ${s(first.measuredOutcome)}.`, counter && `Counterevidence: ${counter}`, item.limitations].filter(Boolean).join(" "),
-    sources: good.map((r) => ({ url: r.url, title: s(r.title).slice(0, 300),
-      authors: Array.isArray(r.authors) ? r.authors.filter((a: unknown) => typeof a === "string" && a.trim()).slice(0, 30).map((a: string) => a.trim().slice(0, 120)) : [],
-      preprint: isPreprintUrl(r.url) || r.publicationStatus === "preprint" })),
-    // Citation only from the primary verified source's printed authors + year; never invented.
+    population: s(first.population),
+    limitations: [s(first.measuredOutcome) && `Measured: ${s(first.measuredOutcome)}.`, s(first.limitations), counter && `Counterevidence: ${counter}`].filter(Boolean).join(" "),
+    sources: [srcOf(first, first.url)],
+    suggestedWording: "",
     citation: formatCitation(firstAuthors, firstYear) ?? "",
   };
 }
