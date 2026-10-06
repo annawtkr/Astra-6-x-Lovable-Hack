@@ -14,7 +14,7 @@ For development, run `pnpm start` and `pnpm dev` in separate terminals. Vite pro
 ## Behaviour
 - Record with MediaRecorder, upload audio up to 25 MB / five minutes, or paste a transcript.
 - Review the main point, supporting details, qualifications and uncertainties with verified original excerpts. Contradictions are surfaced, not silently reconciled.
-- Find research for checkable claims, review findings, limitations and linked sources, and explicitly select evidence for drafts. Research can be skipped. Searches are not exhaustive literature reviews.
+- Find research for checkable claims, review findings, limitations and linked sources, and explicitly select evidence for drafts. Research can be skipped. Searches are not exhaustive literature reviews. Drafts use compact author–year citations, such as (Smith et al., 2024); verification links stay in the evidence cards. Findings without verified authors and year are omitted from cited drafts.
 - Generate an X post, a 3–5 post thread and a LinkedIn draft. A separate OpenAI call checks fidelity against both the transcript and the reviewed brief.
 - Generation and regeneration propose replacements; apply or discard explicitly. Editing clears approval. Warnings from the original check remain visible; edited text is labelled as not rechecked.
 - Approve each draft and simulate publishing. Activity snapshots preserve the exact approved text and always say “Demo — no post was sent.”
