@@ -70,11 +70,13 @@ export default function Studio() {
   return (
     <div className="min-h-screen">
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 btn btn-primary">Skip to content</a>
-      <header className="mx-auto max-w-5xl px-6 pt-10 pb-6">
+      <header className="mx-auto max-w-5xl px-6 pt-12 pb-8 md:pt-16">
         <p className="eyebrow">Personal demo · nothing is ever posted</p>
-        <h1 className="mt-2 text-5xl font-semibold md:text-6xl">
-          Voice Note <em className="text-primary">Studio</em>
+        <h1 className="brand-wordmark mt-6" aria-label="iYap">
+          iYap<span className="brand-orbit" aria-hidden="true" />
         </h1>
+        <p className="mt-5 text-xl tracking-tight text-foreground md:text-2xl">Your thoughts. Clearly expressed.</p>
+        <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">Capture a thought, find its meaning, check the evidence, and make it yours to share.</p>
         <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
           {live === null ? (
             <span className="text-muted-foreground">Checking AI availability…</span>

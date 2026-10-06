@@ -1,4 +1,4 @@
-# Voice Note Studio
+# iYap
 
 A working personal demo: audio or transcript → reviewed meaning → optional evidence review → X, X thread and LinkedIn drafts → user-approved simulated publishing. **No real social posts are sent.**
 
