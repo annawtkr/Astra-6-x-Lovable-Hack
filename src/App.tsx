@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/studio/api";
 import {
   DRAFT_LABELS,
@@ -14,13 +14,17 @@ import {
   type Brief,
   type Draft,
   type Excerpted,
+  type EvidenceClaim,
+  type ResearchResult,
+  usableEvidence,
 } from "@/lib/studio/model";
 import { SAMPLE_BRIEF, SAMPLE_DRAFTS, SAMPLE_TRANSCRIPT } from "@/lib/studio/sample";
 
-type Step = "capture" | "review" | "drafts" | "activity";
+type Step = "capture" | "review" | "evidence" | "drafts" | "activity";
 const STEPS: { id: Step; label: string }[] = [
   { id: "capture", label: "Capture" },
   { id: "review", label: "Review meaning" },
+  { id: "evidence", label: "Evidence" },
   { id: "drafts", label: "Drafts" },
   { id: "activity", label: "Demo activity" },
 ];
@@ -36,6 +40,9 @@ export default function Studio() {
   const [transcript, setTranscript] = useState("");
   const [brief, setBrief] = useState<Brief>(emptyBrief());
   const [drafts, setDrafts] = useState<Draft[]>(emptyDrafts());
+  const [research, setResearch] = useState<ResearchResult | null>(null);
+  const [selectedEvidence, setSelectedEvidence] = useState<string[]>([]);
+  const acceptedEvidence = useMemo(() => research?.claims.filter(c => selectedEvidence.includes(c.id) && usableEvidence(c)) ?? [], [research, selectedEvidence]);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
 
   useEffect(() => {
@@ -48,8 +55,10 @@ export default function Studio() {
   const go = (s: Step) => { setStep(s); setTimeout(() => document.getElementById("step-heading")?.focus(), 0); };
 
   const invalidate = () => setDrafts(ds => ds.map(d => ({...d, approved: false})));
+  const invalidateResearch = () => { setResearch(null); setSelectedEvidence([]); invalidate(); };
   const loadSample = () => {
     if (drafts.some(d => d.posts.some(p => p.trim())) && !window.confirm("Replace your current transcript, brief and drafts with the sample?")) return;
+    invalidateResearch();
     setIsSample(true);
     setTranscript(SAMPLE_TRANSCRIPT);
     setBrief(structuredClone(SAMPLE_BRIEF));
@@ -106,15 +115,20 @@ export default function Studio() {
 
       <main id="main" className="mx-auto max-w-5xl px-6 py-8">
         {step === "capture" && (
-          <Capture live={!!live} transcript={transcript} setTranscript={(t) => { setTranscript(t); setIsSample(false); invalidate(); }}
+          <Capture live={!!live} transcript={transcript} setTranscript={(t) => { setTranscript(t); setIsSample(false); invalidateResearch(); }}
             announce={announce} fail={fail} onSample={loadSample}
-            onBrief={(b) => { setBrief(b); invalidate(); setIsSample(false); go("review"); }} />
+            onBrief={(b) => { setBrief(b); invalidateResearch(); setIsSample(false); go("review"); }} />
         )}
         {step === "review" && (
-          <Review brief={brief} setBrief={(b) => { setBrief(b); invalidate(); }} transcript={transcript} onNext={() => go("drafts")} />
+          <Review brief={brief} setBrief={(b) => { setBrief(b); invalidateResearch(); }} transcript={transcript} onNext={() => go("evidence")} />
+        )}
+        {step === "evidence" && (
+          <Evidence live={!!live} isSample={isSample} transcript={transcript} brief={brief} research={research}
+            selected={selectedEvidence} onResult={(r) => { setResearch(r); setSelectedEvidence([]); invalidate(); }}
+            onSelect={(ids) => { setSelectedEvidence(ids); invalidate(); }} announce={announce} fail={fail} onNext={() => go("drafts")} />
         )}
         {step === "drafts" && (
-          <Drafts live={!!live} transcript={transcript} brief={brief} drafts={drafts} setDrafts={setDrafts} announce={announce} fail={fail}
+          <Drafts acceptedEvidence={acceptedEvidence} live={!!live} transcript={transcript} brief={brief} drafts={drafts} setDrafts={setDrafts} announce={announce} fail={fail}
             onPublish={(e) => { setActivity((a) => [e, ...a]); announce(`Simulated ${DRAFT_LABELS[e.kind]}. Demo — no post was sent.`); }} />
         )}
         {step === "activity" && <Activity entries={activity} onClear={() => { setActivity([]); announce("Demo activity cleared."); }} />}
@@ -387,7 +401,7 @@ function Review({ brief, setBrief, transcript, onNext }: { brief: Brief; setBrie
               </button>
             </fieldset>
           ))}
-          <button type="button" className="btn btn-primary" onClick={onNext} disabled={!brief.mainPoint.trim()}>Continue to drafts →</button>
+          <button type="button" className="btn btn-primary" onClick={onNext} disabled={!brief.mainPoint.trim()}>Continue to evidence →</button>
         </div>
         <aside className="panel h-fit lg:sticky lg:top-6" aria-label="Transcript for reference">
           <h3 className="text-lg font-semibold">Transcript</h3>
@@ -398,14 +412,83 @@ function Review({ brief, setBrief, transcript, onNext }: { brief: Brief; setBrie
   );
 }
 
+/* ---------------- Evidence ---------------- */
+
+const evidenceStatus: Record<EvidenceClaim["status"], string> = {
+  supported: "Supported", mixed: "Mixed or limited evidence", unsupported: "Not supported", not_found: "No suitable evidence found",
+};
+
+function Evidence(props: {
+  live: boolean; isSample: boolean; transcript: string; brief: Brief; research: ResearchResult | null;
+  selected: string[]; onResult: (r: ResearchResult) => void; onSelect: (ids: string[]) => void;
+  announce: (m: string) => void; fail: (m: string) => void; onNext: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const active = useRef(true);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  const research = async () => {
+    setBusy(true); props.announce("Checking factual claims against published research…");
+    try {
+      const result = await api("/research", { transcript: props.transcript, brief: props.brief });
+      if (!active.current) return;
+      props.onResult(result);
+      props.announce("Evidence review ready. Nothing is selected for your drafts yet.");
+    } catch (e) { if (active.current) props.fail(errMsg(e)); }
+    finally { if (active.current) setBusy(false); }
+  };
+  const copy = async () => {
+    const text = props.research?.claims.map(c => `${c.claim}\n${evidenceStatus[c.status]}: ${c.finding}\nLimitations: ${c.limitations}\n${c.sources.map(s => `${s.title} (${s.authors}, ${s.year}; ${s.studyType}; ${s.population}) — ${s.url}`).join("\n")}`).join("\n\n") ?? "";
+    try { await navigator.clipboard.writeText(text); props.announce("Evidence summary copied."); }
+    catch { props.fail("Couldn't copy — your browser blocked clipboard access."); }
+  };
+  return <section aria-labelledby="step-heading" aria-busy={busy}>
+    <StepHeading eyebrow="Step 03" title="Check the evidence">
+      Find studies behind factual claims, then choose which findings to use. Research stays separate from what you originally said.
+    </StepHeading>
+    <div className="panel mb-6">
+      <p>Research sends factual claims to web search, excluding personal anecdotes. Findings may concern a different population or measure; check the limitations before selecting them.</p>
+      <p className="mt-2 text-sm text-muted-foreground">No suitable study is a valid result. Missing evidence does not prove a claim false, and a related study does not establish the exact claim.</p>
+      {props.isSample && <p className="mt-3 badge-sample">Sample mode has no researched evidence. Paste your own transcript to run a real search.</p>}
+      {!props.live && <p className="mt-3 text-sm">Live research is unavailable. You can continue without adding evidence.</p>}
+      <button type="button" className="btn btn-primary mt-4" onClick={research} disabled={busy || !props.live || props.isSample || !props.brief.mainPoint.trim()}>
+        {busy ? "Researching claims…" : props.research ? "Research again" : "Research factual claims"}
+      </button>
+    </div>
+    {props.research && <div className="space-y-5 mb-6">
+      <p className="text-sm text-muted-foreground">Search completed: {new Date(props.research.searchedAt).toLocaleString()}. New findings require your explicit selection.</p>
+      {!props.research.claims.length && <p className="panel">No checkable factual claims were identified. Your personal experience can stand on its own.</p>}
+      {props.research.claims.map(c => <article key={c.id} className="panel" aria-label={c.claim}>
+        <p className="eyebrow">{evidenceStatus[c.status]}</p>
+        <h3 className="mt-2 text-xl font-semibold">{c.claim}</h3>
+        <p className="mt-4"><strong>What the research found:</strong> {c.finding}</p>
+        <p className="mt-3"><strong>Limits of this evidence:</strong> {c.limitations}</p>
+        <ul className="mt-4 space-y-3" aria-label="Research sources">{c.sources.map((source, i) => <li key={i}>
+          {/^(https?):\/\//i.test(source.url) ? <a className="underline text-primary" href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a> : <span>{source.title}</span>}
+          <p className="text-sm text-muted-foreground">{source.authors || "Author not reported"}, {source.year || "Year not reported"} · {source.studyType || "Study type not reported"} · Population: {source.population || "Not reported"}</p>
+        </li>)}</ul>
+        <label className="mt-5 flex items-start gap-3 font-medium">
+          <input type="checkbox" className="mt-1 h-5 w-5 accent-primary" disabled={busy || !usableEvidence(c)} checked={props.selected.includes(c.id)}
+            onChange={e => props.onSelect(e.target.checked ? [...props.selected, c.id] : props.selected.filter(id => id !== c.id))} />
+          Use this finding with its qualifications in drafts
+        </label>
+        {!usableEvidence(c) && <p className="mt-2 text-sm text-muted-foreground">This claim cannot be added as supporting evidence.</p>}
+      </article>)}
+      {props.research.claims.length > 0 && <button type="button" className="btn btn-outline" onClick={copy}>Copy evidence summary</button>}
+    </div>}
+    <button type="button" className="btn btn-primary" onClick={props.onNext} disabled={busy || !props.brief.mainPoint.trim()}>
+      {props.selected.length ? `Continue with ${props.selected.length} selected finding${props.selected.length === 1 ? "" : "s"} →` : "Continue without added evidence →"}
+    </button>
+  </section>;
+}
+
 /* ---------------- Drafts ---------------- */
 
 function Drafts(props: {
-  live: boolean; transcript: string; brief: Brief; drafts: Draft[]; setDrafts: (fn: (d: Draft[]) => Draft[]) => void;
+  acceptedEvidence: EvidenceClaim[]; live: boolean; transcript: string; brief: Brief; drafts: Draft[]; setDrafts: (fn: (d: Draft[]) => Draft[]) => void;
   announce: (m: string) => void; fail: (m: string) => void; onPublish: (e: ActivityEntry) => void;
 }) {
   const [proposals, setProposals] = useState<Draft[] | null>(null);
-  useEffect(() => { setProposals(null); }, [props.brief, props.transcript]);
+  useEffect(() => { setProposals(null); }, [props.brief, props.transcript, props.acceptedEvidence]);
   const [busyAll, setBusyAll] = useState(false);
   const replace = (i: number, d: Draft) => props.setDrafts((ds) => ds.map((x, j) => (j === i ? d : x)));
 
@@ -413,7 +496,7 @@ function Drafts(props: {
     setBusyAll(true);
     props.announce("Generating all three drafts with OpenAI…");
     try {
-      const results = await api("/generate", { transcript: props.transcript, brief: props.brief });
+      const results = await api("/generate", { transcript: props.transcript, brief: props.brief, acceptedEvidence: props.acceptedEvidence });
       setProposals(results.drafts.map(toDraft));
       props.announce("Three proposed drafts ready. Apply them only after reviewing; your existing drafts are unchanged.");
     } catch (e) { props.fail(errMsg(e)); } finally { setBusyAll(false); }
@@ -421,7 +504,7 @@ function Drafts(props: {
 
   return (
     <section aria-labelledby="step-heading">
-      <StepHeading eyebrow="Step 03" title="Shape your drafts">
+      <StepHeading eyebrow="Step 04" title="Shape your drafts">
         Edit freely. Any edit clears approval, so what you approve is exactly what gets simulated.
       </StepHeading>
       {props.live ? (
@@ -434,7 +517,7 @@ function Drafts(props: {
       {proposals && <div className="panel mb-6" aria-label="Proposed drafts"><h3 className="text-xl">Proposed drafts — not applied</h3>{proposals.map(d => <div key={d.kind} className="my-4"><h4>{DRAFT_LABELS[d.kind]}</h4>{d.posts.map((p,i) => <p className="whitespace-pre-wrap my-2" key={i}>{p}</p>)}<Warnings draft={d}/></div>)}<button className="btn btn-primary" onClick={() => { props.setDrafts(() => proposals); setProposals(null); props.announce("Proposals applied. All approvals cleared."); }}>Apply all replacements</button><button className="btn btn-ghost" onClick={() => setProposals(null)}>Discard proposals</button></div>}
       <div className="space-y-6">
         {props.drafts.map((d, i) => (
-          <DraftCard key={d.kind} draft={d} live={props.live} brief={props.brief} transcript={props.transcript} onChange={(nd) => replace(i, nd)}
+          <DraftCard acceptedEvidence={props.acceptedEvidence} key={d.kind} draft={d} live={props.live} brief={props.brief} transcript={props.transcript} onChange={(nd) => replace(i, nd)}
             announce={props.announce} fail={props.fail} onPublish={props.onPublish} />
         ))}
       </div>
@@ -442,12 +525,12 @@ function Drafts(props: {
   );
 }
 
-function DraftCard({ draft, live, brief, transcript, onChange, announce, fail, onPublish }: {
-  draft: Draft; live: boolean; brief: Brief; transcript: string;
+function DraftCard({ acceptedEvidence, draft, live, brief, transcript, onChange, announce, fail, onPublish }: {
+  acceptedEvidence: EvidenceClaim[]; draft: Draft; live: boolean; brief: Brief; transcript: string;
   onChange: (d: Draft) => void; announce: (m: string) => void; fail: (m: string) => void; onPublish: (e: ActivityEntry) => void;
 }) {
   const [proposal, setProposal] = useState<Draft | null>(null);
-  useEffect(() => { setProposal(null); }, [brief, transcript]);
+  useEffect(() => { setProposal(null); }, [brief, transcript, acceptedEvidence]);
   const [busy, setBusy] = useState(false);
   const label = DRAFT_LABELS[draft.kind];
   const problems = publishProblems(draft);
@@ -460,7 +543,7 @@ function DraftCard({ draft, live, brief, transcript, onChange, announce, fail, o
     setBusy(true);
     announce(`Proposing a new ${label}…`);
     try {
-      const r = await api("/generate", { transcript, brief, format: draft.kind });
+      const r = await api("/generate", { transcript, brief, acceptedEvidence, format: draft.kind });
       const match = r.drafts.find((d: {format:string}) => d.format === draft.kind);
       if (!match) throw new Error("No replacement was returned. Your draft is unchanged.");
       setProposal(toDraft(match));
@@ -552,7 +635,7 @@ function DraftCard({ draft, live, brief, transcript, onChange, announce, fail, o
 function Activity({ entries, onClear }: { entries: ActivityEntry[]; onClear: () => void }) {
   return (
     <section aria-labelledby="step-heading">
-      <StepHeading eyebrow="Step 04" title="Demo activity">
+      <StepHeading eyebrow="Step 05" title="Demo activity">
         A session-only log of simulated publishes. It disappears when you close or reload the tab.
       </StepHeading>
       {entries.length === 0 ? (

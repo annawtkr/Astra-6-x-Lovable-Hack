@@ -86,3 +86,15 @@ export function simulatePublish(d: Draft, now = new Date()): ActivityEntry {
     note: DEMO_NOTE,
   };
 }
+
+export type EvidenceClaim = {
+  id: string;
+  claim: string;
+  status: "supported" | "mixed" | "unsupported" | "not_found";
+  finding: string;
+  limitations: string;
+  sources: { title: string; url: string; authors: string; year: string; studyType: string; population: string }[];
+};
+export type ResearchResult = { claims: EvidenceClaim[]; searchedAt: string };
+export const usableEvidence = (claim: EvidenceClaim) =>
+  (claim.status === "supported" || claim.status === "mixed") && claim.sources.length > 0;
