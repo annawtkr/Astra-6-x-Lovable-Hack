@@ -5,7 +5,7 @@ A working personal demo: audio or transcript → reviewed meaning → X, X threa
 ## Run locally
 Requires Node.js 22+ and pnpm. Run `pnpm install`, then `pnpm build`, then `pnpm start`. Open http://127.0.0.1:8787.
 
-The server reads `OPENAI_API_KEY` from `.env.local` (ignored by Git). Never put this key into browser code or a VITE_ variable. Optional settings are documented in `.env.example`. A key is already configured on this workstation; it was created with a seven-day lifetime.
+The server reads `OPENAI_API_KEY` from `.env.local` (ignored by Git). Never put this key into browser code or a VITE_ variable. Optional settings are documented in `.env.example`.
 
 For development, run `pnpm start` and `pnpm dev` in separate terminals. Vite proxies /api to the local server. For a no-key walkthrough, leave OPENAI_API_KEY unset: the app offers explicitly labelled sample content and manual editing.
 
@@ -30,8 +30,8 @@ Supabase edge-function wrappers for transcribe, analyse and generate are include
 ## Verification
 `pnpm test` runs frontend approval rules. `pnpm test:backend` runs validation, source verification, repair, error handling and independent-audit tests. `node backend/smoke.mjs [audio.wav]` performs live API checks using a fictional fixture and optionally a supplied audio file.
 
-## Hosting status
-The functioning version runs locally. The original Lovable project is https://lovable.dev/projects/ea2f4992-1798-4dc2-b6e3-8087f0ac39b8, owned by the connected Gmail account. Lovable MCP currently rejects updates and database provisioning because its connection lacks projects:write. Consequently, the latest local changes are not yet synced there, and Supabase is not provisioned. This demo is not a production service.
+## Built with Lovable and Codex
+Lovable generated the initial React interface, visual design, capture controls, meaning editor, draft cards and simulated publishing flow. Codex integrated a source-verified OpenAI pipeline, independent fidelity checks, local runtime, tests and Supabase edge-function wrappers. The functional demo currently runs locally; hosted deployment and Lovable sync remain to be configured.
 
 ## Limits
 English text-only output; approximate 280-character X guidance rather than platform weighted counting. AI fidelity review can miss errors: user review remains necessary. Uploaded audio relies on readable browser duration metadata. Recording needs browser microphone permission. No scheduling, social connections, persistent history or analytics.
